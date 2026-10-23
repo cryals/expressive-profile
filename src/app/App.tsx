@@ -2,6 +2,7 @@ import { hexFromArgb, sourceColorFromImage } from "@material/material-color-util
 import { AnimatePresence, motion, Reorder, useDragControls } from "motion/react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { projectList } from "../render/blocks";
+import { GitHubAnalysisError, type AnalysisProgress } from "../analytics";
 import { deflateSync, inflateSync, strFromU8, strToU8 } from "fflate";
 import { BLOCKS, blockAsset, defaults, palette, render, REPO_URL, slug, usedIcons, type BlockId, type Config, type Data, type Lang, type ShapeName } from "../render";
 import { buildZip, DEMO, hasIcon, LoadError, loadAllIcons, loadAuthoredStats, loadProfile, profileFiles, store } from "./data";
@@ -179,7 +180,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState<string | null>(null);
+  const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress | null>(null);
   const [statsDialog, setStatsDialog] = useState(false);
   const [input, setInput] = useState(config.login === DEMO_LOGIN ? "" : config.login);
   const [sheet, setSheet] = useState<SheetId | null>(null);
@@ -189,6 +190,8 @@ export default function App() {
   const isDemo = config.login === DEMO_LOGIN;
   const [landing, setLanding] = useState(Boolean(from));
   const field = useRef<HTMLInputElement>(null);
+  const analysisLock = useRef(false);
+  const rateBlockedUntil = useRef<Partial<Record<"public" | "authenticated", number>>>({});
 
   const set = useCallback((fn: (c: Config) => Config) => setConfig(fn), []);
 
@@ -349,18 +352,39 @@ export default function App() {
   };
 
   const analyze = async (authToken: string) => {
-    if (isDemo) return;
+    if (isDemo || analysisLock.current) return;
+    const scope = authToken.trim() ? "authenticated" : "public";
+    const blockedUntil = rateBlockedUntil.current[scope];
+    if (blockedUntil && blockedUntil > Date.now()) {
+      setToast(t.limitAt.replace("{time}", new Date(blockedUntil).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })));
+      return;
+    }
+    analysisLock.current = true;
     setAnalyzing(true);
     setAnalysisProgress(null);
+    const latestProgress: { current: AnalysisProgress | null } = { current: null };
     try {
-      const authored = await loadAuthoredStats(config.login, authToken.trim() || undefined, (completed, total) => setAnalysisProgress(`${completed}/${total}`));
+      const authored = await loadAuthoredStats(config.login, authToken.trim() || undefined, (progress) => {
+        latestProgress.current = progress;
+        setAnalysisProgress(progress);
+      });
       setData((current) => ({ ...current, authored }));
       setConfig((current) => ({ ...current, authoredStats: { ...current.authoredStats, enabled: true } }));
-      setToast(authored.partial ? t.authoredPartial : t.authoredReady);
+      if (authored.partial?.reason === "rate-limit" && latestProgress.current?.rateLimit) {
+        const reset = latestProgress.current.rateLimit.reset;
+        if (reset) rateBlockedUntil.current[scope] = reset.getTime();
+        setToast(t.authoredRateStopped
+          .replace("{remaining}", String(latestProgress.current.rateLimit.remaining))
+          .replace("{time}", reset ? reset.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }) : "—"));
+      } else setToast(authored.partial ? t.authoredPartial : t.authoredReady);
       setStatsDialog(false);
     } catch (error) {
-      setToast(error instanceof Error && error.message === "mismatch" ? t.tokenMismatch : t.authoredFailed);
+      if (error instanceof GitHubAnalysisError && error.message === "rate-limit") {
+        if (error.reset) rateBlockedUntil.current[scope] = error.reset.getTime();
+        setToast(error.reset ? t.limitAt.replace("{time}", error.reset.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })) : t.limit);
+      } else setToast(error instanceof Error && error.message === "mismatch" ? t.tokenMismatch : t.authoredFailed);
     } finally {
+      analysisLock.current = false;
       setAnalyzing(false);
     }
   };
@@ -510,6 +534,7 @@ export default function App() {
           <StatsDialog
             t={t}
             token={token}
+            lang={lang}
             analyzing={analyzing}
             progress={analysisProgress}
             onToken={setToken}
@@ -562,12 +587,13 @@ function Loader() {
 }
 
 function StatsDialog({
-  t, token, analyzing, progress, onToken, onAnalyze, onClose,
+  t, token, lang, analyzing, progress, onToken, onAnalyze, onClose,
 }: {
   t: Dict;
   token: string;
+  lang: Lang;
   analyzing: boolean;
-  progress: string | null;
+  progress: AnalysisProgress | null;
   onToken: (token: string) => void;
   onAnalyze: (token: string) => void;
   onClose: () => void;
@@ -618,7 +644,17 @@ function StatsDialog({
             {analyzing && (
               <motion.div className="analysis-progress" role="status" aria-live="polite" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring}>
                 <Loader />
-                <span>{progress ? t.analyzedRepositories.replace("{progress}", progress) : t.analyze}</span>
+                <span className="analysis-progress-copy">
+                  {progress?.total ? <span>{t.analyzedRepositories.replace("{progress}", `${progress.completed}/${progress.total}`)}</span> : <span>{t.analysisPreparing}</span>}
+                  {progress?.repository && <span>{t.currentRepository.replace("{repository}", progress.repository)}</span>}
+                  {progress && <span>{t.analyzedCommits.replace("{count}", String(progress.commits))}</span>}
+                  {progress?.rateLimit && (
+                    <span>
+                      {t.apiRemaining.replace("{remaining}", String(progress.rateLimit.remaining)).replace("{limit}", String(progress.rateLimit.limit))}
+                      {progress.rateLimit.reset ? ` · ${t.rateReset.replace("{time}", progress.rateLimit.reset.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }))}` : ""}
+                    </span>
+                  )}
+                </span>
               </motion.div>
             )}
           </AnimatePresence>
