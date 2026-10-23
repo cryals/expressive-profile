@@ -5,7 +5,7 @@ import { projectList } from "../render/blocks";
 import { GitHubAnalysisError, type AnalysisProgress } from "../analytics";
 import { deflateSync, inflateSync, strFromU8, strToU8 } from "fflate";
 import { BLOCKS, blockAsset, defaults, palette, render, REPO_URL, slug, usedIcons, type BlockId, type Config, type Data, type Lang, type ShapeName } from "../render";
-import { buildZip, DEMO, hasIcon, LoadError, loadAllIcons, loadAuthoredStats, loadProfile, profileFiles, store } from "./data";
+import { buildZip, DEMO, hasIcon, LoadError, loadAllIcons, loadAuthoredStats, loadProfile, loadSavedAuthoredStats, profileFiles, saveAuthoredStats, store } from "./data";
 import { existingReadme, install, InstallError, requestCode, waitForToken, whoami, type DeviceCode } from "./install";
 import { SheetBody, type SheetId } from "./editors";
 import { DICTS, type Dict } from "./i18n";
@@ -228,7 +228,8 @@ export default function App() {
       try {
         const r = await loadProfile(name);
         if (r.stale) setToast(t.stale);
-        setData(r.data);
+        const savedAuthored = loadSavedAuthoredStats(name);
+        setData(savedAuthored ? { ...r.data, authored: savedAuthored } : r.data);
         setExact(!!r.exact);
         setAvatar(r.avatar);
         setInput(name);
@@ -368,6 +369,7 @@ export default function App() {
         latestProgress.current = progress;
         setAnalysisProgress(progress);
       });
+      saveAuthoredStats(config.login, authored);
       setData((current) => ({ ...current, authored }));
       setConfig((current) => ({ ...current, authoredStats: { ...current.authoredStats, enabled: true } }));
       if (authored.partial?.reason === "rate-limit" && latestProgress.current?.rateLimit) {

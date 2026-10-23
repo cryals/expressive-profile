@@ -218,17 +218,21 @@ commits with no changed files contribute neither a language nor changed lines.
 
 For each qualifying SHA, request its commit detail and inspect `files[]`:
 
-* classify a file by extension using a pinned, generated mapping from GitHub
-  Linguist metadata;
-* map unknown extensions to **Other**;
+* classify a file by exact filename or longest matching extension using a
+  pinned, generated mapping from GitHub Linguist metadata;
+* include Linguist `programming` and `markup` languages, while excluding
+  `data`, `prose` and unknown files from the language denominator;
 * exclude binary files and recognised dependency/vendor/generated paths (lock
   files, `node_modules`, common package vendor directories, minified assets);
 * add the API-provided `additions` and `deletions` to both the repository and
   the classified language.
 
-The percentage is `language.changed / sum(language.changed)`. The UI provides
-a plain-language note that it measures changed lines, so refactors naturally
-count more than tiny edits. It does not present byte composition as authorship.
+The percentage is `language.changed / sum(all recognised language.changed)`.
+The denominator includes languages beyond the configured visible top list, so
+displayed percentages are never renormalised to an artificial 100%. The UI
+provides a plain-language note that it measures changed lines, so refactors
+naturally count more than tiny edits. It does not present byte composition as
+authorship.
 
 ### Pagination, limits, and correctness
 
@@ -242,10 +246,11 @@ zero work.
 To keep the first release reliable, default limits are 100 repositories and
 5,000 unique commits per run, both configurable only in source for now. The
 result declares `partial` if a cap is reached. This is preferable to silently
-claiming an incomplete result is “all commits”. Results are cached in memory
-for a single browser analysis and in `.profile/data.json` for the Action;
-cache keys include login, scope, config version and the aggregate result, but
-never a token.
+claiming an incomplete result is “all commits”. Completed browser results are
+cached in `localStorage` for seven days under a normalised GitHub login; a new
+analysis replaces that value. The cached aggregate may contain private
+repository names, so the README tells users how to clear site data. Action
+results remain in `.profile/data.json`. Neither cache ever includes a token.
 
 ## Token permissions and deployment
 
