@@ -1,5 +1,5 @@
 import { zipSync, strToU8 } from "fflate";
-import { analyzeAuthoredStats } from "../analytics";
+import { analyzeAuthoredStats, type AnalysisProgress } from "../analytics";
 import core from "../render/core-icons.json";
 import { pickIcons, readme, render, streakOf, usedIcons, type Config, type Data, type Day, type Icons, type Repo } from "../render";
 
@@ -171,8 +171,8 @@ export function loadProfile(login: string, force = false): Promise<Loaded> {
   return cache.get(key)!;
 }
 
-export function loadAuthoredStats(login: string, token?: string, onProgress?: (completed: number, total: number) => void) {
-  return analyzeAuthoredStats({ login, token, onProgress: ({ completed, total }) => onProgress?.(completed, total) });
+export function loadAuthoredStats(login: string, token?: string, onProgress?: (progress: AnalysisProgress) => void) {
+  return analyzeAuthoredStats({ login, token, onProgress });
 }
 
 async function fetchProfile(login: string) {

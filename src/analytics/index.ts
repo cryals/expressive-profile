@@ -3,6 +3,9 @@ import type { AuthoredLanguage, AuthoredRepository, AuthoredStats } from "../ren
 const API = "https://api.github.com";
 const MAX_REPOSITORIES = 100;
 const MAX_COMMITS = 5000;
+const REQUEST_CONCURRENCY = 4;
+const REPOSITORY_CONCURRENCY = 3;
+const MIN_REQUEST_INTERVAL_MS = 90;
 const EXCLUDED = /(^|\/)(node_modules|vendor|dist|build|coverage|\.next|\.nuget)(\/|$)|(^|\/)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|composer\.lock|cargo\.lock|go\.sum)$/i;
 const MINIFIED = /\.min\.(?:js|css)$/i;
 
@@ -27,7 +30,14 @@ type ApiFetch = (path: string) => Promise<Response>;
 type ApiRepository = { full_name: string; name: string; html_url: string; disabled?: boolean };
 type ApiCommit = { sha: string; author?: { login?: string | null } | null; commit?: { author?: { email?: string | null } | null } | null };
 
-export interface AnalysisProgress { repository: string; completed: number; total: number; commits: number; }
+export interface RateLimitStatus { limit: number; remaining: number; reset?: Date; }
+export interface AnalysisProgress {
+  repository: string;
+  completed: number;
+  total: number;
+  commits: number;
+  rateLimit?: RateLimitStatus;
+}
 export interface AnalysisOptions {
   login: string;
   token?: string;
@@ -50,6 +60,41 @@ function nextLink(link: string | null) {
 function toPath(url: string) {
   const parsed = new URL(url);
   return parsed.pathname + parsed.search;
+}
+
+function requestPool(request: ApiFetch, concurrency: number): ApiFetch {
+  let active = 0;
+  let nextStart = 0;
+  const queue: { path: string; resolve: (response: Response) => void; reject: (error: unknown) => void }[] = [];
+  const run = () => {
+    while (active < concurrency && queue.length) {
+      const item = queue.shift()!;
+      active++;
+      const start = Math.max(Date.now(), nextStart);
+      nextStart = start + MIN_REQUEST_INTERVAL_MS;
+      const wait = Math.max(0, start - Date.now());
+      setTimeout(() => {
+        request(item.path).then(item.resolve, item.reject).finally(() => {
+          active--;
+          run();
+        });
+      }, wait);
+    }
+  };
+  return (path) => new Promise<Response>((resolve, reject) => {
+    queue.push({ path, resolve, reject });
+    run();
+  });
+}
+
+async function mapLimit<T>(values: T[], concurrency: number, worker: (value: T) => Promise<void>) {
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (cursor < values.length) {
+      const index = cursor++;
+      await worker(values[index]);
+    }
+  }));
 }
 
 async function page<T>(request: ApiFetch, path: string, result: T[] = []): Promise<T[]> {
@@ -81,17 +126,36 @@ function partial(reason: AuthoredStats["partial"] extends infer T ? T extends { 
 export async function analyzeAuthoredStats(options: AnalysisOptions): Promise<AuthoredStats> {
   const login = options.login.trim();
   const token = options.token?.trim() || undefined;
-  const request: ApiFetch = options.request ?? ((path) => fetch(`${API}${path}`, { headers: headers(token) }));
+  const rawRequest: ApiFetch = options.request ?? ((path) => fetch(`${API}${path}`, { headers: headers(token) }));
   const maxRepositories = options.maxRepositories ?? MAX_REPOSITORIES;
   const maxCommits = options.maxCommits ?? MAX_COMMITS;
   const scope: AuthoredStats["scope"] = token ? "authenticated" : "public";
+  const reserve = token ? 100 : 5;
+  const progress: AnalysisProgress = { repository: "", completed: 0, total: 0, commits: 0 };
+  let rateLimit: RateLimitStatus | undefined;
+  const report = () => options.onProgress?.({ ...progress, rateLimit });
+  const pooledRequest = requestPool(rawRequest, REQUEST_CONCURRENCY);
+  const request: ApiFetch = async (path) => {
+    if (rateLimit && rateLimit.remaining <= reserve) throw new GitHubAnalysisError("rate-limit", rateLimit.reset);
+    const response = await pooledRequest(path);
+    const limitHeader = response.headers.get("x-ratelimit-limit");
+    const remainingHeader = response.headers.get("x-ratelimit-remaining");
+    const limit = Number(limitHeader);
+    const remaining = Number(remainingHeader);
+    const reset = Number(response.headers.get("x-ratelimit-reset"));
+    if (limitHeader !== null && remainingHeader !== null && Number.isFinite(limit) && Number.isFinite(remaining)) {
+      rateLimit = { limit, remaining, reset: reset ? new Date(reset * 1000) : undefined };
+      report();
+    }
+    return response;
+  };
 
   const checked = async (path: string) => {
     const response = await request(path);
     if (response.status === 401) throw new GitHubAnalysisError("auth");
     if (response.status === 403 || response.status === 429) {
       const reset = Number(response.headers.get("x-ratelimit-reset"));
-      throw new GitHubAnalysisError("rate-limit", reset ? new Date(reset * 1000) : undefined);
+      throw new GitHubAnalysisError("rate-limit", reset ? new Date(reset * 1000) : rateLimit?.reset);
     }
     if (!response.ok) throw new GitHubAnalysisError("failed");
     return response;
@@ -114,43 +178,48 @@ export async function analyzeAuthoredStats(options: AnalysisOptions): Promise<Au
   } catch (error) {
     if (error instanceof GitHubAnalysisError) throw error;
     const response = error as Response;
-    if (response.status === 403 || response.status === 429) throw new GitHubAnalysisError("rate-limit");
+    if (response.status === 403 || response.status === 429) throw new GitHubAnalysisError("rate-limit", rateLimit?.reset);
     throw new GitHubAnalysisError("failed");
   }
 
   const stats: AuthoredStats = { scope, repositoriesScanned: 0, repositoriesWithCommits: 0, commits: 0, additions: 0, deletions: 0, languages: [], repositories: [] };
   const languages = new Map<string, AuthoredLanguage>();
   const total = Math.min(repositories.length, maxRepositories);
+  progress.total = total;
+  report();
   if (repositories.length > maxRepositories) stats.partial = partial("repository-limit", 0, repositories.length);
   const seen = new Set<string>();
+  let stopped = false;
 
-  for (const repository of repositories.slice(0, maxRepositories)) {
-    if (repository.disabled) continue;
-    if (seen.size >= maxCommits) {
-      stats.partial = partial("commit-limit", stats.repositoriesScanned, total);
-      break;
-    }
+  await mapLimit(repositories.slice(0, maxRepositories), REPOSITORY_CONCURRENCY, async (repository) => {
+    if (stopped || repository.disabled) return;
+    progress.repository = repository.name;
+    report();
     try {
       const branches = await page<{ name: string }>(request, `/repos/${repository.full_name}/branches?per_page=100`);
       const commits = new Map<string, ApiCommit>();
-      for (const branch of branches) {
-        const list = await page<ApiCommit>(request, `/repos/${repository.full_name}/commits?sha=${encodeURIComponent(branch.name)}&per_page=100`);
+      await Promise.all(branches.map(async (branch) => {
+        const list = await page<ApiCommit>(request, `/repos/${repository.full_name}/commits?sha=${encodeURIComponent(branch.name)}&author=${encodeURIComponent(authorLogin)}&per_page=100`);
         for (const commit of list) if (authored(commit, authorLogin, emails)) commits.set(commit.sha, commit);
-      }
+      }));
       let repoCommits = 0;
       let additions = 0;
       let deletions = 0;
-      for (const commit of commits.values()) {
-        if (seen.has(commit.sha)) continue;
+      await mapLimit([...commits.values()], REQUEST_CONCURRENCY, async (commit) => {
+        if (stopped) return;
+        if (seen.has(commit.sha)) return;
         if (seen.size >= maxCommits) {
           stats.partial = partial("commit-limit", stats.repositoriesScanned, total);
-          break;
+          stopped = true;
+          return;
         }
         seen.add(commit.sha);
         const detail = await checked(`/repos/${repository.full_name}/commits/${commit.sha}`);
         const body = await detail.json() as { files?: { filename?: string; additions?: number; deletions?: number }[] };
         repoCommits++;
         stats.commits++;
+        progress.commits = stats.commits;
+        report();
         for (const file of body.files ?? []) {
           const kind = language(file.filename ?? "");
           if (!kind) continue;
@@ -164,7 +233,7 @@ export async function analyzeAuthoredStats(options: AnalysisOptions): Promise<Au
           current.changed += plus + minus;
           languages.set(kind, current);
         }
-      }
+      });
       if (repoCommits) {
         stats.repositoriesWithCommits++;
         stats.additions += additions;
@@ -172,15 +241,20 @@ export async function analyzeAuthoredStats(options: AnalysisOptions): Promise<Au
         stats.repositories.push({ name: repository.name, url: repository.html_url, commits: repoCommits, additions, deletions });
       }
       stats.repositoriesScanned++;
-      options.onProgress?.({ repository: repository.name, completed: stats.repositoriesScanned, total, commits: stats.commits });
+      progress.completed = stats.repositoriesScanned;
+      report();
     } catch (error) {
       if (error instanceof GitHubAnalysisError && error.message === "rate-limit") {
         stats.partial = partial("rate-limit", stats.repositoriesScanned, total);
-        break;
+        stopped = true;
+        return;
       }
       stats.partial ??= partial("inaccessible", stats.repositoriesScanned, total);
+      stats.repositoriesScanned++;
+      progress.completed = stats.repositoriesScanned;
+      report();
     }
-  }
+  });
   stats.languages = [...languages.values()].sort((a, b) => b.changed - a.changed);
   stats.repositories.sort((a, b) => b.additions + b.deletions - (a.additions + a.deletions));
   return stats;

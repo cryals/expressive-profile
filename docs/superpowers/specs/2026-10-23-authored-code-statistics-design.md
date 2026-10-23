@@ -307,6 +307,22 @@ disagreeing.
 * One inaccessible repository: continue remaining repositories and name only
   the count of skipped repositories, not private repository names.
 
+## Request efficiency and rate limits
+
+Commit-list requests use GitHub's `author` filter so unrelated history never
+reaches the browser. SHA values are deduplicated across branches before commit
+details are loaded. A shared request pool processes up to four requests and
+three repositories concurrently, with request starts paced below GitHub's
+documented secondary REST limit. Response headers are the source of truth for
+the current limit, remaining allowance and reset time. The UI reports those
+values with repository and commit progress. New work stops with a safety reserve
+of 100 authenticated requests (five in the 60-request public window), returning
+the aggregate collected so far as partial data.
+
+Preset block lists include `authoredStats`; the full and statistics presets
+show it, while presets that intentionally omit it keep it available in the
+hidden-block tray instead of dropping it from the profile order.
+
 ## Verification plan
 
 1. Unit-test identity matching, SHA de-duplication, Link pagination,

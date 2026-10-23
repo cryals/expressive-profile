@@ -1144,6 +1144,19 @@ a {
   color: currentColor;
 }
 
+.analysis-progress-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.analysis-progress-copy span:not(:first-child) {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: .78;
+}
+
 .authored-dialog-actions {
   flex-wrap: wrap;
 }
