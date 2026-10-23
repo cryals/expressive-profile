@@ -265,8 +265,8 @@ workflow. GitHub REST supports CORS, so the browser can query GitHub directly.
 The installed profile workflow continues to use `PROFILE_TOKEN || github.token`.
 With no secret it produces public-only authored metrics. With `PROFILE_TOKEN`,
 it can regenerate private-aware metrics on schedule. The generated workflow
-must refer to `cryals/expressive-profile` (or an explicitly released tag) so
-the fork's implementation, not the upstream action, is executed.
+must refer to `metawka/expressive-profile@v1` (or another explicitly released
+upstream tag), so installed profiles follow the maintained upstream action.
 
 ## PAT dialog interaction
 
