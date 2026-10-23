@@ -1,4 +1,5 @@
 import { zipSync, strToU8 } from "fflate";
+import { analyzeAuthoredStats } from "../analytics";
 import core from "../render/core-icons.json";
 import { pickIcons, readme, render, streakOf, usedIcons, type Config, type Data, type Day, type Icons, type Repo } from "../render";
 
@@ -170,6 +171,10 @@ export function loadProfile(login: string, force = false): Promise<Loaded> {
   return cache.get(key)!;
 }
 
+export function loadAuthoredStats(login: string, token?: string, onProgress?: (completed: number, total: number) => void) {
+  return analyzeAuthoredStats({ login, token, onProgress: ({ completed, total }) => onProgress?.(completed, total) });
+}
+
 async function fetchProfile(login: string) {
   const user = await api(`users/${encodeURIComponent(login)}`);
   const [repos, events] = await Promise.all([
@@ -246,7 +251,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: metawka/expressive-profile@v1
+      - uses: cryals/expressive-profile@add-authored-stats
         with:
           token: \${{ secrets.PROFILE_TOKEN || github.token }}
 `;

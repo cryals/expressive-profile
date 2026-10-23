@@ -1,4 +1,4 @@
-import { about, AUTO_ICONS, buttons, card, credit, hero, projectList, projectView, SITE_URL, socials, stack, stats, streak, wave } from "./blocks";
+import { about, authoredStats, AUTO_ICONS, buttons, card, credit, hero, projectList, projectView, SITE_URL, socials, stack, stats, streak, wave } from "./blocks";
 import { esc } from "./kit";
 import { palette } from "./palette";
 import type { BlockId, Config, Data, Icons, Lang } from "./types";
@@ -7,13 +7,13 @@ export * from "./types";
 export { palette } from "./palette";
 export { REPO_URL, SITE_URL } from "./blocks";
 
-export const BLOCKS: BlockId[] = ["hero", "socials", "about", "stack", "projects", "stats", "streak", "wave", "buttons"];
+export const BLOCKS: BlockId[] = ["hero", "socials", "about", "stack", "projects", "stats", "authoredStats", "streak", "wave", "buttons"];
 
 // Defaults
 export function defaults(login: string, lang: Lang): Config {
   const ru = lang === "ru";
   return {
-    version: 1,
+    version: 2,
     login,
     seed: "#FF5CA8",
     seedFromAvatar: true,
@@ -65,6 +65,18 @@ export function defaults(login: string, lang: Lang): Config {
       weekdays: ru ? "ВПВСЧПС" : "SMTWTFS",
       languages: ru ? "Языки в моих репозиториях" : "Languages across my repositories",
       showLanguages: true,
+    },
+    authoredStats: {
+      enabled: false,
+      title: ru ? "Мой код на GitHub" : "My GitHub code",
+      repositories: ru ? "Репозитории" : "Repositories",
+      commits: ru ? "Коммиты" : "Commits",
+      changed: ru ? "Изменено строк" : "Lines changed",
+      languages: ru ? "Языки в моих коммитах" : "Languages in my commits",
+      noData: ru ? "Коммиты пока не найдены" : "No authored commits found",
+      partial: ru ? "Неполные данные" : "Partial data",
+      topLanguages: 5,
+      topRepositories: 4,
     },
     streak: {
       title: ru ? "Серия" : "Streak",
@@ -167,6 +179,7 @@ export function render(c: Config, d: Data, all: Icons, avatar: string | null, th
     put("about", about(ctx));
     put("stack", stack(ctx));
     put("stats", stats(ctx));
+    if (c.authoredStats.enabled) put("authored-stats", authoredStats(ctx));
     put("wave", wave(ctx));
     put("streak", streak(ctx));
     for (const [name, svg] of Object.entries(socials(ctx))) put(name, svg);
@@ -207,6 +220,7 @@ export function readme(c: Config, d: Data, files: Record<string, string>) {
     if (id === "about") parts.push(pic("about", c.about.title));
     if (id === "stack") parts.push(pic("stack", c.stack.title));
     if (id === "stats") parts.push(pic("stats", c.stats.title));
+    if (id === "authoredStats" && c.authoredStats.enabled) parts.push(pic("authored-stats", c.authoredStats.title));
     if (id === "wave") parts.push(pic("wave", ""));
     if (id === "streak") parts.push(pic("streak", c.streak.title));
     if (id === "socials" && c.socials.items.length) {

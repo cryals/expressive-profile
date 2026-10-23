@@ -4,7 +4,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, ty
 import { projectList } from "../render/blocks";
 import { deflateSync, inflateSync, strFromU8, strToU8 } from "fflate";
 import { BLOCKS, defaults, palette, render, REPO_URL, slug, usedIcons, type BlockId, type Config, type Data, type Lang, type ShapeName } from "../render";
-import { buildZip, DEMO, hasIcon, LoadError, loadAllIcons, loadProfile, profileFiles, store } from "./data";
+import { buildZip, DEMO, hasIcon, LoadError, loadAllIcons, loadAuthoredStats, loadProfile, profileFiles, store } from "./data";
 import { existingReadme, install, InstallError, requestCode, waitForToken, whoami, type DeviceCode } from "./install";
 import { SheetBody, type SheetId } from "./editors";
 import { DICTS, type Dict } from "./i18n";
@@ -35,21 +35,25 @@ function initialLang(): Lang {
   return saved ?? "en";
 }
 
-function migrate(c: Config | null, lang: Lang): Config {
+function migrate(c: unknown, lang: Lang): Config {
   const base = defaults(DEMO_LOGIN, lang);
-  if (!c || c.version !== 1) return base;
+  if (!c || typeof c !== "object") return base;
+  const saved = c as Omit<Partial<Config>, "version"> & { version?: number };
+  if (saved.version !== 1 && saved.version !== 2) return base;
   return {
     ...base,
-    ...c,
-    hero: { ...base.hero, ...c.hero },
-    about: { ...base.about, ...c.about },
-    stack: { ...base.stack, ...c.stack },
-    projects: { ...base.projects, ...c.projects },
-    stats: { ...base.stats, ...c.stats },
-    buttons: { ...base.buttons, ...c.buttons },
-    streak: { ...base.streak, ...c.streak },
-    socials: { ...base.socials, ...c.socials },
-    order: placeNew(c.order.filter((b) => BLOCKS.includes(b))),
+    ...saved,
+    version: 2,
+    hero: { ...base.hero, ...saved.hero },
+    about: { ...base.about, ...saved.about },
+    stack: { ...base.stack, ...saved.stack },
+    projects: { ...base.projects, ...saved.projects },
+    stats: { ...base.stats, ...saved.stats },
+    authoredStats: { ...base.authoredStats, ...saved.authoredStats },
+    buttons: { ...base.buttons, ...saved.buttons },
+    streak: { ...base.streak, ...saved.streak },
+    socials: { ...base.socials, ...saved.socials },
+    order: placeNew((saved.order ?? []).filter((b) => BLOCKS.includes(b))),
   };
 }
 
@@ -171,6 +175,9 @@ export default function App() {
   const [avatar, setAvatar] = useState<string | null>(null);
   const [avatarSeed, setAvatarSeed] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [token, setToken] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState<string | null>(null);
   const [input, setInput] = useState(config.login === DEMO_LOGIN ? "" : config.login);
   const [sheet, setSheet] = useState<SheetId | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -219,6 +226,7 @@ export default function App() {
         setExact(!!r.exact);
         setAvatar(r.avatar);
         setInput(name);
+        if (name.toLowerCase() !== config.login.toLowerCase()) setToken("");
         setConfig((c) => ({ ...c, login: name }));
       } catch (e) {
         if (e instanceof LoadError && e.message === "limit" && e.reset) {
@@ -336,6 +344,22 @@ export default function App() {
     setDialog(true);
   };
 
+  const analyze = async () => {
+    if (isDemo) return;
+    setAnalyzing(true);
+    setAnalysisProgress(null);
+    try {
+      const authored = await loadAuthoredStats(config.login, token || undefined, (completed, total) => setAnalysisProgress(`${completed}/${total}`));
+      setData((current) => ({ ...current, authored }));
+      setConfig((current) => ({ ...current, authoredStats: { ...current.authoredStats, enabled: true } }));
+      setToast(authored.partial ? t.authoredPartial : t.authoredReady);
+    } catch (error) {
+      setToast(error instanceof Error && error.message === "mismatch" ? t.tokenMismatch : t.authoredFailed);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const reset = () => {
     if (!confirm(t.resetConfirm)) return;
     setConfig(defaults(config.login, lang));
@@ -388,6 +412,14 @@ export default function App() {
             )}
           </AnimatePresence>
         </form>
+        <form className="login" onSubmit={(e) => { e.preventDefault(); analyze(); }}>
+          <Glyph name="key" size={20} />
+          <input value={token} onChange={(e) => setToken(e.target.value)} type="password" placeholder={t.token} spellCheck={false} autoCapitalize="off" aria-label={t.token} />
+          <button type="submit" className="login-go" disabled={analyzing || isDemo} aria-label={t.analyze}>
+            <Glyph name={analyzing ? "progress_activity" : "analytics"} size={20} />
+          </button>
+        </form>
+        {analyzing && analysisProgress && <span className="login-state" aria-live="polite">{analysisProgress}</span>}
         <div className="actions">
           <IconButton icon="share" title={t.share} onClick={share} />
           <IconButton icon="palette" title={t.style} onClick={() => setSheet(sheet === "style" ? null : "style")} active={sheet === "style"} />
@@ -432,7 +464,7 @@ export default function App() {
               onReorder={(next: BlockId[]) => setConfig((c) => ({ ...c, order: [...next, ...c.order.filter((b) => c.hidden.includes(b))] }))}
             >
               {visible.map((id) => (
-                <Block key={id} id={id} t={t} active={sheet === id} onEdit={id === "wave" ? undefined : () => setSheet(id as SheetId)} onHide={() => hide(id)}>
+            <Block key={id} id={id} t={t} active={sheet === id} onEdit={id === "wave" ? undefined : () => setSheet(id as SheetId)} onHide={() => hide(id)}>
                   <BlockView id={id} config={deferred} data={data} src={src} size={(n) => width(n) * Math.min(1, k)} fill={(n) => width(n) * k} ratio={ratio} />
                 </Block>
               ))}
