@@ -1,5 +1,5 @@
-export const CLIENT_ID = "Ov23liY5DJwj4qqF4gPH";
-const ORIGINS = ["https://metawka.github.io", "http://localhost:5230"];
+export const CLIENT_ID = process.env.GITHUB_CLIENT_ID;
+const ORIGINS = ["https://cryals.github.io", "http://localhost:5230"];
 
 export function cors(req, res) {
   const origin = req.headers.origin;

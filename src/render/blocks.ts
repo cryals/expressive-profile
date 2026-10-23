@@ -3,8 +3,8 @@ import type { Config, Data, Icons, LinkButton, Palette, Repo, ShapeName, Social 
 
 export const W = 840;
 export const CARD_SHAPES: ShapeName[] = ["cookie", "clover", "sunny", "flower"];
-export const REPO_URL = "https://github.com/metawka/expressive-profile";
-export const SITE_URL = "https://metawka.github.io/expressive-profile/";
+export const REPO_URL = "https://github.com/cryals/expressive-profile";
+export const SITE_URL = "https://cryals.github.io/expressive-profile/";
 
 const ICON_RULES: [string[], string][] = [
   [["zip", "archive", "7-zip", "rar"], "folder_zip"],

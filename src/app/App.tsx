@@ -696,12 +696,7 @@ function GetDialog({ t, config, data, avatar, onLogin, onClose }: { t: Dict; con
           <h2>{t.getTitle}</h2>
         </div>
         <div className="get-options">
-          <motion.button type="button" className="get-option main" onClick={start} whileTap={{ scale: 0.97 }} transition={bouncy}>
-            <Glyph name="rocket_launch" size={28} />
-            <span className="get-option-title">{t.optInstall}</span>
-            <span className="get-option-text">{t.optInstallText}</span>
-          </motion.button>
-          <motion.button type="button" className="get-option" onClick={zip} whileTap={{ scale: 0.97 }} transition={bouncy}>
+          <motion.button type="button" className="get-option main" onClick={zip} whileTap={{ scale: 0.97 }} transition={bouncy}>
             <Glyph name="download" size={28} />
             <span className="get-option-title">{t.optZip}</span>
             <span className="get-option-text">{t.optZipText}</span>

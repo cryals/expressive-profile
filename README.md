@@ -3,24 +3,24 @@
 Generator of GitHub profile READMEs in the Material 3 Expressive style. The profile is set up on the site and installed into the profile repository. A GitHub Action then refreshes the stats every hour.
 
 <p align="center">
-  <a href="https://metawka.github.io/expressive-profile/"><b>Open the generator</b></a>
+  <a href="https://cryals.github.io/expressive-profile/"><b>Open the generator</b></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/metawka">Live example</a>
+  <a href="https://github.com/cryals">Live example</a>
   &nbsp;·&nbsp;
   <a href="https://github.com/marketplace/actions/expressive-profile">GitHub Marketplace</a>
 </p>
 
-<p align="center"><a href="https://github.com/metawka/expressive-profile/stargazers"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/star-badge-dark.svg"><img src="docs/star-badge-light.svg" width="640" alt="Star Expressive Profile on GitHub"></picture></a></p>
+<p align="center"><a href="https://github.com/cryals/expressive-profile/stargazers"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/star-badge-dark.svg"><img src="docs/star-badge-light.svg" width="640" alt="Star Expressive Profile on GitHub"></picture></a></p>
 
 <div align="center">
 
-<a href="https://github.com/metawka"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/metawka/metawka/main/assets/hero-dark.svg"><img src="https://raw.githubusercontent.com/metawka/metawka/main/assets/hero-light.svg" width="100%" alt="Profile header"></picture></a>
+<a href="https://github.com/cryals"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cryals/cryals/main/assets/hero-dark.svg"><img src="https://raw.githubusercontent.com/cryals/cryals/main/assets/hero-light.svg" width="100%" alt="Profile header"></picture></a>
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/metawka/metawka/main/assets/stats-dark.svg"><img src="https://raw.githubusercontent.com/metawka/metawka/main/assets/stats-light.svg" width="100%" alt="GitHub activity"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cryals/cryals/main/assets/stats-dark.svg"><img src="https://raw.githubusercontent.com/cryals/cryals/main/assets/stats-light.svg" width="100%" alt="GitHub activity"></picture>
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/metawka/metawka/main/assets/streak-dark.svg"><img src="https://raw.githubusercontent.com/metawka/metawka/main/assets/streak-light.svg" width="100%" alt="Streak"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cryals/cryals/main/assets/streak-dark.svg"><img src="https://raw.githubusercontent.com/cryals/cryals/main/assets/streak-light.svg" width="100%" alt="Streak"></picture>
 
-<sub>Live cards from <a href="https://github.com/metawka">github.com/metawka</a>, refreshed hourly by the Action. The look follows the GitHub light or dark theme.</sub>
+<sub>Live cards from <a href="https://github.com/cryals">github.com/cryals</a>, refreshed hourly by the Action. The look follows the GitHub light or dark theme.</sub>
 
 </div>
 
@@ -70,7 +70,7 @@ Generator of GitHub profile READMEs in the Material 3 Expressive style. The prof
 
 ## Usage
 
-1. Open the [generator](https://metawka.github.io/expressive-profile/) and enter a GitHub username.
+1. Open the [generator](https://cryals.github.io/expressive-profile/) and enter a GitHub username.
 2. Set up the blocks and press **Download**.
 3. **Install to GitHub** signs in with a GitHub code, creates the profile repository and uploads the files.
 
@@ -86,7 +86,7 @@ To change the profile later, edit `profile.json` in the repository or set it up 
 
 ## Made with Expressive Profile
 
-- [metawka](https://github.com/metawka)
+- [cryals](https://github.com/cryals)
 
 Profiles built with the generator can be added to this list with a pull request.
 
@@ -114,7 +114,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: metawka/expressive-profile@v1
+      - uses: cryals/expressive-profile@add-authored-stats-test
         with:
           token: ${{ secrets.PROFILE_TOKEN || github.token }}
 ```
@@ -132,7 +132,7 @@ GitHub API rate limits and very large histories can produce a partial result. Th
 
 ## Privacy
 
-The generator site counts visits with [GoatCounter](https://www.goatcounter.com/) on `metawka.github.io` only. No cookies are used and no personal data is stored.
+The generator does not include third-party analytics or persist personal data.
 
 ## Development
 
