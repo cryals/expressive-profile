@@ -78,17 +78,6 @@ function partial(reason: AuthoredStats["partial"] extends infer T ? T extends { 
   return { reason, scanned, total } as AuthoredStats["partial"];
 }
 
-async function verifiedEmails(request: ApiFetch) {
-  try {
-    const response = await request("/user/emails");
-    if (!response.ok) return new Set<string>();
-    const values = await response.json() as { email?: string; verified?: boolean }[];
-    return new Set(values.filter((item) => item.verified && item.email).map((item) => item.email!.toLowerCase()));
-  } catch {
-    return new Set<string>();
-  }
-}
-
 export async function analyzeAuthoredStats(options: AnalysisOptions): Promise<AuthoredStats> {
   const login = options.login.trim();
   const token = options.token?.trim() || undefined;
@@ -114,7 +103,6 @@ export async function analyzeAuthoredStats(options: AnalysisOptions): Promise<Au
     const viewer = await (await checked("/user")).json() as { login?: string; email?: string | null };
     if (!viewer.login || viewer.login.toLowerCase() !== login.toLowerCase()) throw new GitHubAnalysisError("mismatch");
     authorLogin = viewer.login;
-    emails = await verifiedEmails(request);
     if (viewer.email) emails.add(viewer.email.toLowerCase());
   }
 

@@ -213,7 +213,6 @@ function AuthoredStats({ c, set, t }: Props) {
   const s = c.authoredStats;
   const up = (v: Partial<Config["authoredStats"]>) => set((c) => ({ ...c, authoredStats: { ...c.authoredStats, ...v } }));
   return <>
-    <Switch label={t.showAuthoredStats} value={s.enabled} onChange={(enabled) => up({ enabled })} />
     <Section>
       <Field label={t.title} value={s.title} onChange={(title) => up({ title })} maxLength={40} />
       <Field label={t.languagesLabel} value={s.languages} onChange={(languages) => up({ languages })} maxLength={60} />

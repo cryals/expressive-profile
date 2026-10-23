@@ -3,7 +3,7 @@ import { AnimatePresence, motion, Reorder, useDragControls } from "motion/react"
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { projectList } from "../render/blocks";
 import { deflateSync, inflateSync, strFromU8, strToU8 } from "fflate";
-import { BLOCKS, defaults, palette, render, REPO_URL, slug, usedIcons, type BlockId, type Config, type Data, type Lang, type ShapeName } from "../render";
+import { BLOCKS, blockAsset, defaults, palette, render, REPO_URL, slug, usedIcons, type BlockId, type Config, type Data, type Lang, type ShapeName } from "../render";
 import { buildZip, DEMO, hasIcon, LoadError, loadAllIcons, loadAuthoredStats, loadProfile, profileFiles, store } from "./data";
 import { existingReadme, install, InstallError, requestCode, waitForToken, whoami, type DeviceCode } from "./install";
 import { SheetBody, type SheetId } from "./editors";
@@ -40,6 +40,7 @@ function migrate(c: unknown, lang: Lang): Config {
   if (!c || typeof c !== "object") return base;
   const saved = c as Omit<Partial<Config>, "version"> & { version?: number };
   if (saved.version !== 1 && saved.version !== 2) return base;
+  const legacy = saved.version === 1;
   return {
     ...base,
     ...saved,
@@ -54,6 +55,7 @@ function migrate(c: unknown, lang: Lang): Config {
     streak: { ...base.streak, ...saved.streak },
     socials: { ...base.socials, ...saved.socials },
     order: placeNew((saved.order ?? []).filter((b) => BLOCKS.includes(b))),
+    hidden: legacy ? [...new Set([...(saved.hidden ?? []), "authoredStats" as BlockId])] : (saved.hidden ?? base.hidden),
   };
 }
 
@@ -178,6 +180,7 @@ export default function App() {
   const [token, setToken] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState<string | null>(null);
+  const [statsDialog, setStatsDialog] = useState(false);
   const [input, setInput] = useState(config.login === DEMO_LOGIN ? "" : config.login);
   const [sheet, setSheet] = useState<SheetId | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -297,6 +300,7 @@ export default function App() {
     const on = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setDialog(false);
+        setStatsDialog(false);
         setSheet(null);
       }
     };
@@ -344,15 +348,16 @@ export default function App() {
     setDialog(true);
   };
 
-  const analyze = async () => {
+  const analyze = async (authToken: string) => {
     if (isDemo) return;
     setAnalyzing(true);
     setAnalysisProgress(null);
     try {
-      const authored = await loadAuthoredStats(config.login, token || undefined, (completed, total) => setAnalysisProgress(`${completed}/${total}`));
+      const authored = await loadAuthoredStats(config.login, authToken.trim() || undefined, (completed, total) => setAnalysisProgress(`${completed}/${total}`));
       setData((current) => ({ ...current, authored }));
       setConfig((current) => ({ ...current, authoredStats: { ...current.authoredStats, enabled: true } }));
       setToast(authored.partial ? t.authoredPartial : t.authoredReady);
+      setStatsDialog(false);
     } catch (error) {
       setToast(error instanceof Error && error.message === "mismatch" ? t.tokenMismatch : t.authoredFailed);
     } finally {
@@ -412,15 +417,13 @@ export default function App() {
             )}
           </AnimatePresence>
         </form>
-        <form className="login" onSubmit={(e) => { e.preventDefault(); analyze(); }}>
-          <Glyph name="key" size={20} />
-          <input value={token} onChange={(e) => setToken(e.target.value)} type="password" placeholder={t.token} spellCheck={false} autoCapitalize="off" aria-label={t.token} />
-          <button type="submit" className="login-go" disabled={analyzing || isDemo} aria-label={t.analyze}>
-            <Glyph name={analyzing ? "progress_activity" : "analytics"} size={20} />
-          </button>
-        </form>
-        {analyzing && analysisProgress && <span className="login-state" aria-live="polite">{analysisProgress}</span>}
         <div className="actions">
+          <IconButton
+            icon={analyzing ? "progress_activity" : "analytics"}
+            title={t.analyze}
+            onClick={() => isDemo ? setToast(t.needLogin) : setStatsDialog(true)}
+            active={statsDialog}
+          />
           <IconButton icon="share" title={t.share} onClick={share} />
           <IconButton icon="palette" title={t.style} onClick={() => setSheet(sheet === "style" ? null : "style")} active={sheet === "style"} />
           <motion.button type="button" className="lang-btn" onClick={switchLang} whileTap={{ scale: 0.85 }} transition={bouncy} title={t.language}>
@@ -503,6 +506,20 @@ export default function App() {
       </AnimatePresence>
 
       <AnimatePresence>
+        {statsDialog && (
+          <StatsDialog
+            t={t}
+            token={token}
+            analyzing={analyzing}
+            progress={analysisProgress}
+            onToken={setToken}
+            onAnalyze={analyze}
+            onClose={() => setStatsDialog(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {dialog && (
           <GetDialog
             t={t}
@@ -542,6 +559,78 @@ function Logo() {
 function Loader() {
   const shape = useCycle(CYCLE, 520);
   return <Morph shape={shape} size={26} spin className="loader" />;
+}
+
+function StatsDialog({
+  t, token, analyzing, progress, onToken, onAnalyze, onClose,
+}: {
+  t: Dict;
+  token: string;
+  analyzing: boolean;
+  progress: string | null;
+  onToken: (token: string) => void;
+  onAnalyze: (token: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <motion.div className="scrim" onClick={analyzing ? undefined : onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.div
+        className="dialog authored-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="authored-dialog-title"
+        onClick={(event) => event.stopPropagation()}
+        initial={{ opacity: 0, scale: 0.88, y: 30 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.94 }}
+        transition={spring}
+      >
+        <div className="authored-dialog-head">
+          <motion.span className="authored-dialog-icon" animate={{ rotate: analyzing ? 360 : 0 }} transition={analyzing ? { duration: 1.4, repeat: Infinity, ease: "linear" } : spring}>
+            <Glyph name={analyzing ? "progress_activity" : "analytics"} size={28} />
+          </motion.span>
+          <div>
+            <h2 id="authored-dialog-title">{t.authoredDialogTitle}</h2>
+            <p>{t.authoredDialogText}</p>
+          </div>
+          {!analyzing && <IconButton icon="close" title={t.close} onClick={onClose} />}
+        </div>
+
+        <form onSubmit={(event) => { event.preventDefault(); onAnalyze(token); }}>
+          <label className="field authored-token">
+            <span className="field-label">{t.tokenLabel}</span>
+            <span className="authored-token-control">
+              <Glyph name="key" size={20} />
+              <input
+                value={token}
+                onChange={(event) => onToken(event.target.value)}
+                type="password"
+                placeholder={t.token}
+                spellCheck={false}
+                autoCapitalize="off"
+                autoComplete="off"
+                disabled={analyzing}
+              />
+            </span>
+          </label>
+
+          <AnimatePresence initial={false}>
+            {analyzing && (
+              <motion.div className="analysis-progress" role="status" aria-live="polite" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring}>
+                <Loader />
+                <span>{progress ? t.analyzedRepositories.replace("{progress}", progress) : t.analyze}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="dialog-actions authored-dialog-actions">
+            <Button kind="tonal" onClick={() => onAnalyze("")} disabled={analyzing}>{t.analyzePublic}</Button>
+            <Button icon={analyzing ? "progress_activity" : "analytics"} onClick={() => onAnalyze(token)} disabled={analyzing || !token.trim()}>{t.analyzeWithToken}</Button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>
+  );
 }
 
 function Backdrop() {
@@ -596,7 +685,8 @@ function BlockView({ id, config, data, src, size, fill, ratio }: { id: BlockId; 
   }
   if (id === "socials") return <LinkRow prefix="social" count={config.socials.items.length} src={src} size={size} fill={fill} ratio={ratio} />;
   if (id === "buttons") return <LinkRow prefix="button" count={config.buttons.items.length} src={src} size={size} fill={fill} ratio={ratio} />;
-  return <img draggable={false} className="full" src={src(id)} alt={id} style={{ aspectRatio: 1 / (ratio(id) || 1) }} />;
+  const asset = blockAsset(id);
+  return <img draggable={false} className="full" src={src(asset)} alt={id} style={{ aspectRatio: 1 / (ratio(asset) || 1) }} />;
 }
 
 function LinkRow({ prefix, count, src, size, fill, ratio }: { prefix: string; count: number; src: (n: string) => string; size: (n: string) => number; fill: (n: string) => number; ratio: (n: string) => number }) {

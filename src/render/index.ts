@@ -9,6 +9,10 @@ export { REPO_URL, SITE_URL } from "./blocks";
 
 export const BLOCKS: BlockId[] = ["hero", "socials", "about", "stack", "projects", "stats", "authoredStats", "streak", "wave", "buttons"];
 
+export function blockAsset(id: BlockId) {
+  return id.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+}
+
 // Defaults
 export function defaults(login: string, lang: Lang): Config {
   const ru = lang === "ru";
@@ -128,7 +132,7 @@ export function buttonUrl(c: Config, url: string) {
 }
 
 export function usedIcons(c: Config, d: Data) {
-  const names = new Set<string>(["favorite", "code", "monitoring", "star", "commit", "book_2", "group", "arrow_outward", "person", ...AUTO_ICONS]);
+  const names = new Set<string>(["favorite", "code", "monitoring", "star", "commit", "book_2", "group", "arrow_outward", "person", "key", "analytics", "progress_activity", "difference", ...AUTO_ICONS]);
   for (const x of c.hero.chips) names.add(x.icon);
   for (const x of c.about.items) names.add(x.icon);
   for (const g of c.stack.groups) for (const x of g.items) names.add(x.icon);
@@ -179,7 +183,7 @@ export function render(c: Config, d: Data, all: Icons, avatar: string | null, th
     put("about", about(ctx));
     put("stack", stack(ctx));
     put("stats", stats(ctx));
-    if (c.authoredStats.enabled) put("authored-stats", authoredStats(ctx));
+    put(blockAsset("authoredStats"), authoredStats(ctx));
     put("wave", wave(ctx));
     put("streak", streak(ctx));
     for (const [name, svg] of Object.entries(socials(ctx))) put(name, svg);
@@ -220,7 +224,7 @@ export function readme(c: Config, d: Data, files: Record<string, string>) {
     if (id === "about") parts.push(pic("about", c.about.title));
     if (id === "stack") parts.push(pic("stack", c.stack.title));
     if (id === "stats") parts.push(pic("stats", c.stats.title));
-    if (id === "authoredStats" && c.authoredStats.enabled) parts.push(pic("authored-stats", c.authoredStats.title));
+    if (id === "authoredStats") parts.push(pic(blockAsset(id), c.authoredStats.title));
     if (id === "wave") parts.push(pic("wave", ""));
     if (id === "streak") parts.push(pic("streak", c.streak.title));
     if (id === "socials" && c.socials.items.length) {
