@@ -1,8 +1,8 @@
-name: Pages
+name: pages build and deployment
 
 on:
   push:
-    branches: [main]
+    branches: [main, add-authored-stats-test]
   workflow_dispatch:
 
 permissions:
