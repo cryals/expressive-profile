@@ -251,7 +251,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: cryals/expressive-profile@add-authored-stats
+      - uses: metawka/expressive-profile@v1
         with:
           token: \${{ secrets.PROFILE_TOKEN || github.token }}
 `;
