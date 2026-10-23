@@ -263,6 +263,18 @@ it can regenerate private-aware metrics on schedule. The generated workflow
 must refer to `cryals/expressive-profile` (or an explicitly released tag) so
 the fork's implementation, not the upstream action, is executed.
 
+## PAT dialog interaction
+
+The top bar keeps its existing three-part layout: logo, GitHub login and
+actions. Authored-code analysis is represented by one compact analytics action
+instead of a second input in the bar. Activating it opens the existing Material
+dialog surface with a visible PAT label, a private-aware action and a separate
+public-only action. The dialog uses the application's existing spring motion,
+surface tokens, radii, scrim and reduced-motion behavior. During analysis the
+controls are disabled and an `aria-live` progress row reports processed
+repositories without resizing the top bar. The PAT remains only in React
+memory and is never written to storage or exported files.
+
 ## Implementation boundaries
 
 * `src/analytics/` — API client, pagination, identity matching, file
