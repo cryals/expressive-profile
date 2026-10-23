@@ -1,4 +1,5 @@
-import type { AuthoredLanguage, AuthoredRepository, AuthoredStats } from "../render";
+import type { AuthoredLanguage, AuthoredStats } from "../render";
+import linguist from "./linguist.json";
 
 const API = "https://api.github.com";
 const MAX_REPOSITORIES = 100;
@@ -8,17 +9,6 @@ const REPOSITORY_CONCURRENCY = 3;
 const MIN_REQUEST_INTERVAL_MS = 90;
 const EXCLUDED = /(^|\/)(node_modules|vendor|dist|build|coverage|\.next|\.nuget)(\/|$)|(^|\/)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|composer\.lock|cargo\.lock|go\.sum)$/i;
 const MINIFIED = /\.min\.(?:js|css)$/i;
-
-const EXTENSIONS: Record<string, string> = {
-  ts: "TypeScript", tsx: "TypeScript", js: "JavaScript", jsx: "JavaScript", mjs: "JavaScript", cjs: "JavaScript",
-  py: "Python", rs: "Rust", go: "Go", java: "Java", kt: "Kotlin", kts: "Kotlin", cs: "C#", fs: "F#",
-  cpp: "C++", cc: "C++", cxx: "C++", c: "C", h: "C", hpp: "C++", rb: "Ruby", php: "PHP",
-  swift: "Swift", scala: "Scala", dart: "Dart", lua: "Lua", r: "R", rkt: "Racket", ex: "Elixir", exs: "Elixir",
-  erl: "Erlang", hrl: "Erlang", hs: "Haskell", clj: "Clojure", cljs: "Clojure", groovy: "Groovy",
-  sh: "Shell", bash: "Shell", zsh: "Shell", ps1: "PowerShell", sql: "SQL", html: "HTML", htm: "HTML",
-  css: "CSS", scss: "SCSS", sass: "Sass", less: "Less", vue: "Vue", svelte: "Svelte", md: "Markdown",
-  yml: "YAML", yaml: "YAML", json: "JSON", toml: "TOML", xml: "XML", dockerfile: "Dockerfile",
-};
 
 export class GitHubAnalysisError extends Error {
   constructor(message: "auth" | "mismatch" | "rate-limit" | "failed", readonly reset?: Date) {
@@ -108,9 +98,13 @@ async function page<T>(request: ApiFetch, path: string, result: T[] = []): Promi
 function language(path: string) {
   if (EXCLUDED.test(path) || MINIFIED.test(path)) return null;
   const name = path.split("/").pop()?.toLowerCase() ?? "";
-  if (name === "dockerfile") return "Dockerfile";
-  const extension = name.includes(".") ? name.split(".").pop()! : "";
-  return EXTENSIONS[extension] ?? "Other";
+  const byName = (linguist.filenames as Record<string, string>)[name];
+  if (byName) return byName;
+  for (let dot = name.indexOf("."); dot >= 0; dot = name.indexOf(".", dot + 1)) {
+    const byExtension = (linguist.extensions as Record<string, string>)[name.slice(dot)];
+    if (byExtension) return byExtension;
+  }
+  return null;
 }
 
 function authored(commit: ApiCommit, login: string, emails: Set<string>) {

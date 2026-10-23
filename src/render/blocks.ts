@@ -368,7 +368,7 @@ export function authoredStats(ctx: Ctx) {
     return svg(W, h, b.join(""), s.title, c.motion);
   }
   const langs = a.languages.slice(0, Math.max(1, s.topLanguages));
-  const total = langs.reduce((sum, item) => sum + item.changed, 0) || 1;
+  const total = a.languages.reduce((sum, item) => sum + item.changed, 0) || 1;
   const colors = [p.primary, p.tertiary, p.secondary, mix(p.primary, p.surfaceContainerLow, .45), mix(p.tertiary, p.surfaceContainerLow, .45)];
   const radius = 58, circumference = 2 * Math.PI * radius;
   let offset = 0;
